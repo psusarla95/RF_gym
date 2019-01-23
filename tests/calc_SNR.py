@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 import numpy as np
+import pandas as pd
 from matplotlib import colors
 
 '''
@@ -48,13 +49,13 @@ def acosd(val):
 
 
 class MIMO:
-    def __init__(self, init_ptx, init_RBS, init_TBS, tr_antennas, rx_antennas):
+    def __init__(self, init_ptx, init_RBS, init_TBS, tr_antennas, rx_antennas, xrange, xangle):
 
         self.freq = 28e9  # 28 GHz
         self.d = 0.5  # relative element space
         # transmitter and receiver location
-        self.X_range = 108
-        self.X_angle = 0
+        self.X_range = xrange
+        self.X_angle = xangle
 
         self.lmda = c / self.freq  # c - speed of light, scipy constant
         self.P_tx = init_ptx  # dBm
@@ -69,12 +70,12 @@ class MIMO:
 
         self.X_t = X[0]
         self.X_r = X[1]
-        self.Dist = np.linalg.norm(np.array(self.X_t) - np.array(self.X_r))
+        self.Dist =  np.sqrt(self.X_t**2 + self.X_r**2)#np.linalg.norm(np.array(self.X_t) - np.array(self.X_r))
         self.tau_k = self.Dist / c
 
     def Transmit_Energy(self, ptx):
-        self.df = 75e3  # carrier spacing frequency
-        self.nFFT = 2048  # no. of subspace carriers
+        self.df = 60*1e3#75e3  # carrier spacing frequency
+        self.nFFT = 1200#2048  # no. of subspace carriers
 
         self.T_sym = 1 / self.df
         self.B = self.nFFT * self.df
@@ -92,6 +93,7 @@ class MIMO:
         return h
 
     def array_factor(self, ang, N):
+        #print("ang: {0}, N: {1}".format(ang, N))
         x = np.arange(0, N)
         # y = np.array([1 / np.sqrt(N) * np.exp(1j * 2 * pi * (self.d / self.lmda) * math.sin(ang) * k) for k in x])
         y = np.zeros((N, 1), dtype=np.complex)
@@ -102,7 +104,7 @@ class MIMO:
         # print("y: {0}".format(y))
         return y
 
-    def Antenna_Array(self, RBS, TBS, level):
+    def Antenna_Array(self, RBS, TBS, rb_level, tb_level):
         alpha = 0  # relative rotation between transmit and receiver arrays
 
         if self.X_r > 0:
@@ -118,9 +120,9 @@ class MIMO:
         self.RBS = RBS
         self.TBS = TBS
         # print("RBS: {0}, TBS: {1}".format(self.RBS, self.TBS))
-        w_mat = self.Communication_Vector(self.RBS, self.N_tx, level)  # transmit unit norm vector
+        w_mat = self.Communication_Vector(self.RBS, self.N_tx, rb_level)  # receive unit norm vector
 
-        f_mat = self.Communication_Vector(self.TBS, self.N_rx, level)  # receive unit norm vector
+        f_mat = self.Communication_Vector(self.TBS, self.N_rx, tb_level)  # transmit unit norm vector
 
         return a_tx, a_rx, self.N_tx, self.N_rx, w_mat, f_mat
 
@@ -167,12 +169,12 @@ class MIMO:
         return np.kron(D_az, D_el)
 
 
-    def Calc_SNR(self, ptx, rbs, tbs, level):
+    def Calc_SNR(self, ptx, rbs, tbs, rb_level, tb_level):
 
         Es = self.Transmit_Energy(ptx)  # beta_pair[0])
         h = self.Channel()
         #print("channel coefficient: {0}".format(h))
-        antenna_ret = self.Antenna_Array(rbs, tbs, level)
+        antenna_ret = self.Antenna_Array(rbs, tbs, rb_level, tb_level)
         a_tx, a_rx, N_tx, N_rx, w_mat, f_mat = antenna_ret
         #print("w_mat: {0}".format(w_mat))
         #print("f_mat: {0}".format(f_mat))
@@ -223,72 +225,106 @@ def Action_Space_Mapping(actions):
 if __name__ == '__main__':
     Actions = {
         #'ptx': [20, 44, 1],
-        'RBS': [-60, 60, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
-        'TBS': [-60, 60, 5],
-        'BeamWidth': [1,3,1]
+        'RBS': [-30, 30, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
+        'TBS': [-30, 30, 5],
+        'RBW': [1,3,1],
+        'TBW':[1,3,1]
     }
 
     action_values = Action_Space_Mapping(Actions)
 
-    best_ptx = 46#Actions['ptx'][0]
-    best_rbs = Actions['RBS'][0]
-    best_tbs = Actions['TBS'][0]
-    best_level = Actions['BeamWidth'][0]
-    #ptx_values = np.arange(Actions['ptx'][0], Actions['ptx'][1]+1, Actions['ptx'][2])
-    rbs_values = np.arange(Actions['RBS'][0], Actions['RBS'][1]+1, Actions['RBS'][2])
-    tbs_values = np.arange(Actions['TBS'][0], Actions['TBS'][1]+1, Actions['TBS'][2])
+
+    #xrange=3600
+    #xangle=40
+    Xrange=np.arange(100,1001,100)
+    Xangle=np.arange(0,1,1)
+    print(Xrange)
+    print(Xangle)
+
+    filename = 'D:/Phd/literature_survey/RL_MIMO/rlmimo_benchmark_res.csv'
+
+    ref_data={}
+    dist_data = [(i, j) for i in Xrange for j in Xangle]
+    ref_data['Xrange'] = [x[0] for x in dist_data]
+    ref_data['Xangle'] = [x[1] for x in dist_data]
+
+    best_SNRS=[]
+    for xr in Xrange:
+        for xa in Xangle:
+            best_ptx = 30  # Actions['ptx'][0]
+            best_rbs = Actions['RBS'][0]
+            best_tbs = Actions['TBS'][0]
+            best_rb_level = Actions['RBW'][0]
+            best_tb_level = Actions['TBW'][0]
+            # ptx_values = np.arange(Actions['ptx'][0], Actions['ptx'][1]+1, Actions['ptx'][2])
+            rbs_values = np.arange(Actions['RBS'][0], Actions['RBS'][1] + 1, Actions['RBS'][2])
+            tbs_values = np.arange(Actions['TBS'][0], Actions['TBS'][1] + 1, Actions['TBS'][2])
+
+            snr_list = []
+            maxSNR = -30
+            SNR_counts = {}
+            for i in range(-30, 51):
+                SNR_counts[i] = 0
+            # mimo = MIMO(Actions['ptx'][0], Actions['RBS'][0], Actions['TBS'][0], 16,16)
+            init_ptx = best_ptx
+            init_rbs = 0
+            init_tbs = 180
+            Ntx = 16
+            Nrx = 16
+
+            mimo = MIMO(init_ptx,init_rbs, init_tbs, Ntx, Nrx, xr, xa)
+            print(xr,xa)
+            #level=1
+            goal_count=0
+            for k in action_values.keys():
+                #ptx, rbs, tbs = action_values[k]
+                #print("action_values: {0}".format(action_values[k]))
+                rbs, tbs, rb_level, tb_level = action_values[k]
+
+                #snr = mimo.Calc_SNR(ptx, rbs, tbs)
+                snr = mimo.Calc_SNR(best_ptx, rbs, tbs, rb_level, tb_level)
+
+                logSNR = np.around(10 * np.log10(snr), decimals=5)
+
+                SNR_counts[int(np.around(logSNR,2))] +=1
 
 
-    snr_list=[]
-    maxSNR = -120
-    SNR_counts ={}
-    for i in range(-120,61):
-        SNR_counts[i] = 0
-    #mimo = MIMO(Actions['ptx'][0], Actions['RBS'][0], Actions['TBS'][0], 16,16)
-    init_ptx = best_ptx
-    init_rbs = 0
-    init_tbs = 180
-    Ntx = 16
-    Nrx = 16
-    mimo = MIMO(init_ptx,init_rbs, init_rbs, Ntx, Nrx)
-    #level=1
-    goal_count=0
-    for k in action_values.keys():
-        #ptx, rbs, tbs = action_values[k]
-        rbs, tbs, level = action_values[k]
+                snr_list.append(logSNR)
+                if logSNR > maxSNR:
+                    maxSNR = logSNR
+                    #best_ptx, best_rbs, best_tbs = ptx, rbs, tbs
+                    best_rbs, best_tbs, best_rb_level, best_tb_level = rbs, tbs, rb_level, tb_level
+                #break
 
-        #snr = mimo.Calc_SNR(ptx, rbs, tbs)
-        snr = mimo.Calc_SNR(best_ptx, rbs, tbs, level)
+            print("(Xrange, Xangle): {5}, Max SNR reached: {0}, best_ptx: {1}, best_rbs: {2}, best_tbs: {3}, best_rb_level: {4}, best_tb_level: {6}".format(maxSNR, best_ptx, best_rbs, best_tbs, best_rb_level, (xr,xa), best_tb_level))
+            best_SNRS.append(maxSNR)
 
-        logSNR = np.around(10 * np.log10(snr), decimals=5)
+    ref_data['SNR'] = best_SNRS
 
-        SNR_counts[int(np.around(logSNR,2))] +=1
+    df = pd.DataFrame(ref_data, columns=['Xrange', 'Xangle', 'SNR'])
+    print(df)
+    df.to_csv(filename,index=False)
 
 
-        snr_list.append(logSNR)
-        if logSNR > maxSNR:
-            maxSNR = logSNR
-            #best_ptx, best_rbs, best_tbs = ptx, rbs, tbs
-            best_rbs, best_tbs, best_level = rbs, tbs, level
-        #break
-    print("Max SNR reached: {0}, best_ptx: {1}, best_rbs: {2}, best_tbs: {3}, best_level: {4}".format(maxSNR, best_ptx, best_rbs, best_tbs, best_level))
+    '''
     c=np.array(snr_list)
     print("Goal Count: {0}".format(goal_count))
     #c_int = np.array([int(np.around(x)) for x in snr_list])
 
-
+    '''
     '''
     Display the parameters where SNR is maximum
+    '''
     '''
     count=0
     for i in range(len(c)):
         if c[i] == maxSNR:
             count+=1
             print("Optimal parameter {0}: index: {1}, values: {2}".format(count, i, action_values[i]))
-
+    '''
 
     # c = np.random.standard_normal(25)
-    fig = plt.figure()
+
     '''
     x_surf, y_surf = np.meshgrid(rbs_values, tbs_values)
     z_surf = np.outer(np.ones(len(ptx_values)).T, ptx_values)
@@ -311,6 +347,8 @@ if __name__ == '__main__':
     #plt.colorbar(surf)
     fig.colorbar(surf, shrink=0.5, aspect=5)
     '''
+    '''
+    fig = plt.figure()
     ax = fig.add_subplot(3,1,1)
     ax.grid()
     ax.plot(action_values.keys(), c)
@@ -329,7 +367,7 @@ if __name__ == '__main__':
 
     plt.show()
 
-
+    '''
 
 
     '''

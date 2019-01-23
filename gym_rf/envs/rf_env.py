@@ -73,13 +73,13 @@ class MIMO:
     - Consider a fixed relative antenna element space, d=0.5
 
     '''
-    def __init__(self, init_ptx, init_RBS, init_TBS, tr_antennas, rx_antennas):
+    def __init__(self, init_ptx, init_RBS, init_TBS, tr_antennas, rx_antennas, xrange, xangle):
 
         self.freq = 28e9  # 28 GHz
         self.d = 0.5  # relative element space
         # transmitter and receiver location
-        self.X_range = 108
-        self.X_angle = 0
+        self.X_range = xrange
+        self.X_angle = xangle
 
         self.lmda = c / self.freq  # c - speed of light, scipy constant
         self.P_tx = init_ptx  # dBm
@@ -94,7 +94,7 @@ class MIMO:
 
         self.X_t = X[0]
         self.X_r = X[1]
-        self.Dist = np.linalg.norm(np.array(self.X_t) - np.array(self.X_r))
+        self.Dist = np.sqrt(self.X_t**2 + self.X_r**2)#np.linalg.norm(np.array(self.X_t) - np.array(self.X_r))
         self.tau_k = self.Dist / c
 
     '''
@@ -110,8 +110,8 @@ class MIMO:
      
     '''
     def Transmit_Energy(self, ptx):
-        self.df = 75e3  # carrier spacing frequency
-        self.nFFT = 2048  # no. of subspace carriers
+        self.df = 60*1e3#75e3  # carrier spacing frequency
+        self.nFFT = 1200#2048  # no. of subspace carriers
 
         self.T_sym = 1 / self.df
         self.B = self.nFFT * self.df
@@ -317,9 +317,44 @@ class MIMO:
                 #print("RSSI_val({1},{2}): {0}".format(rssi_val[i,j], i, j))
 
         best_RSSI_val = np.max(rssi_val)
-        SNR = Es * best_RSSI_val / N0
+        self.SNR = Es * best_RSSI_val / N0
 
-        return SNR
+        return self.SNR
+
+    def Calc_Rate(self, stepcount, Tf):
+        Tf = Tf * 1e-3  # for msec
+        ktf = np.ceil(Tf / self.T_sym)
+        Tf_time = ktf * self.T_sym
+
+        #print("SNR while calculating rate: {0}".format(self.SNR))
+        #levels = 3
+        rate = self.B*(1-(stepcount)*self.T_sym/Tf_time)*np.log2(1+self.SNR)*1e-9 #in Gbit/s
+        return rate
+
+    def Calc_RateOpt(self, stepcount, Tf, ptx):
+        Es = self.Transmit_Energy(ptx)
+        h = self.Channel()
+        N0 = self.Noise()
+
+        # transmit array response vector
+        a_tx = self.array_factor(self.theta_tx, self.N_tx)
+
+        # receiver array response vector
+        a_rx = self.array_factor(self.phi_rx, self.N_rx)
+
+        SNROpt = h*np.sqrt(self.N_rx)*np.matmul(np.matmul(np.matmul(a_rx.conj().T, a_rx), a_tx.conj().T),  a_tx)*np.sqrt(self.N_tx)
+        SNROpt = Es*((SNROpt.real)**2 + (SNROpt.imag)**2)/N0
+        SNROpt = SNROpt[0][0]
+
+        Tf = Tf*1e-3 #for msec
+        ktf = np.ceil(Tf/self.T_sym)
+        Tf_time = ktf*self.T_sym
+        RateOpt = self.B*(1-stepcount*self.T_sym/Tf_time)*np.log2(1+SNROpt)*1e-9 #in Gbit/s
+
+        #print("SNROpt: {0}, RateOpt: {1}".format(SNROpt, RateOpt))
+
+
+        return RateOpt
 
 '''
 
@@ -384,13 +419,13 @@ class RFBeamEnv(gym.Env):
     def __init__(self):
         self.Actions = {
             # 'ptx': [24, 30, 2],
-            'RBS': [-60, 60, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
-            'TBS': [-60, 60, 5],
+            'RBS': [-30, 30, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
+            'TBS': [-30, 30, 5],
             'RBeamWidth': [1,3,1],
             'TBeamWidth': [1,3,1]
         }
         self.Observations = {
-            'SNR': [-120, 60, 1] #-120dB to 65dB
+            'SNR': [-30, 50, 1] #-120dB to 65dB
         }
 
         self.observation_values = Custom_Space_Mapping(self.Observations)
@@ -398,16 +433,18 @@ class RFBeamEnv(gym.Env):
         self.num_observations = len(self.observation_values.keys())
         self.min_state = self.observation_values[0][0]#minimum SNR state
         self.max_state = self.observation_values[self.num_observations-1][0]#maximum SNR state
-        self.state_threshold =30 #good enough SNR state
+        self.state_threshold =20 #good enough SNR state
         self.N_tx = 16 #Num of transmitter antenna elements
         self.N_rx = 16 #Num of receiver antenna elements
         self.count = 0
-        self.ptx =  46
+        self.ptx =  30
         self.level = 1
         self.state = None
 
         # Initializing parameters with their minimal values
-        self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx)
+        #self.xrange=700
+        #self.xangle=40
+
         #self.mimo = MIMO(self.ptx,self.Actions['RBS'][0],self.Actions['TBS'][0], self.N_tx, self.N_rx)
 
         self.action_values = Custom_Space_Mapping(self.Actions)
@@ -420,6 +457,12 @@ class RFBeamEnv(gym.Env):
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
+
+    def set_distance(self, xrange, xangle):
+        # Initializing parameters with their minimal values
+        self.xrange= xrange
+        self.xangle= xangle
+        self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx, self.xrange, self.xangle)
 
     def set_state(self, s):
         self.state = s
@@ -471,7 +514,7 @@ class RFBeamEnv(gym.Env):
         elif SNR_state >= self.state_threshold:
             reward = 5*np.exp((SNR_state - self.max_state) / 10)  # shaping reward function
         else:
-            reward=-1
+            reward=0
 
         #Mapping back from SNR range to observation space
         state = self.rev_observation_values[SNR_state]
@@ -507,7 +550,7 @@ class RFBeamEnv(gym.Env):
         self.state= self.observation_space.sample()
 
         #self.mimo = MIMO(self.ptx,self.Actions['RBS'][0], self.Actions['TBS'][0], 4, 4)
-        self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx)
+        #self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx, self.xrange, self.xangle)
         self.count=0
         return self.state
 
@@ -525,9 +568,10 @@ class RFBeamEnv(gym.Env):
     def test_reset(self, xrange, xangle, action_val):
 
         #New mimo model
-        self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx)
-        self.mimo.X_range = xrange
-        self.mimo.X_angle = xangle
+        #self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx, xrange, xangle)
+        self.set_distance(xrange, xangle)
+        #self.mimo.X_range = xrange
+        #self.mimo.X_angle = xangle
 
         #random action
         #action = self.action_space.sample()
@@ -542,9 +586,14 @@ class RFBeamEnv(gym.Env):
         else:
             SNR_state = logSNR
 
-        print("SNR state calculated: {0}".format(SNR_state))
+        #print("SNR state calculated: {0}".format(SNR_state))
         state = self.rev_observation_values[SNR_state]
         return state, action_val
+
+    def get_Rate(self, stepcount, Tf):
+        rateOpt = self.mimo.Calc_RateOpt(stepcount,Tf,self.ptx)
+        rate = self.mimo.Calc_Rate(stepcount, Tf)
+        return rate, rateOpt
 
     def render(self, mode='human', close=False):
         pass
