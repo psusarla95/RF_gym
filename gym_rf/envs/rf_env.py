@@ -419,8 +419,8 @@ class RFBeamEnv(gym.Env):
     def __init__(self):
         self.Actions = {
             # 'ptx': [24, 30, 2],
-            'RBS': [-30, 30, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
-            'TBS': [-30, 30, 5],
+            'RBS': [-10, 10, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
+            'TBS': [-10, 10, 5],
             'RBeamWidth': [1,3,1],
             'TBeamWidth': [1,3,1]
         }
@@ -432,8 +432,8 @@ class RFBeamEnv(gym.Env):
         self.rev_observation_values = dict((v[0],k) for k,v in self.observation_values.items())
         self.num_observations = len(self.observation_values.keys())
         self.min_state = self.observation_values[0][0]#minimum SNR state
-        self.max_state = self.observation_values[self.num_observations-1][0]#maximum SNR state
-        self.state_threshold =20 #good enough SNR state
+        #self.max_state = self.observation_values[self.num_observations-1][0]#maximum SNR state
+        self.state_threshold =28 #good enough SNR state
         self.N_tx = 16 #Num of transmitter antenna elements
         self.N_rx = 16 #Num of receiver antenna elements
         self.count = 0
@@ -458,10 +458,11 @@ class RFBeamEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def set_distance(self, xrange, xangle):
+    def set_distance(self, xrange, xangle, goal_state):
         # Initializing parameters with their minimal values
         self.xrange= xrange
         self.xangle= xangle
+        self.max_state=goal_state
         self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx, self.xrange, self.xangle)
 
     def set_state(self, s):
@@ -565,14 +566,14 @@ class RFBeamEnv(gym.Env):
     
     '''
 
-    def test_reset(self, xrange, xangle, action_val):
+    def test_reset(self, xrange, xangle, action_val, goal_state):
 
         #New mimo model
         #self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx, xrange, xangle)
-        self.set_distance(xrange, xangle)
+        self.set_distance(xrange, xangle, goal_state)
         #self.mimo.X_range = xrange
         #self.mimo.X_angle = xangle
-
+        self.count=0
         #random action
         #action = self.action_space.sample()
         SNR = self.mimo.Calc_SNR(self.ptx, action_val[0], action_val[1], action_val[2], action_val[3])
@@ -588,6 +589,7 @@ class RFBeamEnv(gym.Env):
 
         #print("SNR state calculated: {0}".format(SNR_state))
         state = self.rev_observation_values[SNR_state]
+
         return state, action_val
 
     def get_Rate(self, stepcount, Tf):

@@ -225,10 +225,10 @@ def Action_Space_Mapping(actions):
 if __name__ == '__main__':
     Actions = {
         #'ptx': [20, 44, 1],
-        'RBS': [-30, 30, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
-        'TBS': [-30, 30, 5],
-        'RBW': [1,3,1],
-        'TBW':[1,3,1]
+        'RBS': [-10, 10, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
+        'TBS': [-10, 10, 5],
+        'RBW': [1,2,1],
+        'TBW':[1,2,1]
     }
 
     action_values = Action_Space_Mapping(Actions)
