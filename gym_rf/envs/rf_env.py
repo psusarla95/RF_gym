@@ -25,7 +25,7 @@ def db2lin(val_db):
 
 # cosine over degree
 def cosd(val):
-    return math.cos(val * pi / 180)
+    return cmath.cos(val * pi / 180)
 
 
 # sine over degree
@@ -84,7 +84,7 @@ class MIMO:
         self.lmda = c / self.freq  # c - speed of light, scipy constant
         self.P_tx = init_ptx  # dBm
         self.TBS = init_TBS  # 0 radians, range [-pi, pi]
-        self.RBS = init_RBS  # 0 raidans, range [-pi, pi]
+        self.RBS = init_RBS  # 0 radians, range [-pi, pi]
         self.N_tx = tr_antennas  # no. of transmitting antennas
         self.N_rx = rx_antennas  # no. of receiving antennas
 
@@ -419,8 +419,8 @@ class RFBeamEnv(gym.Env):
     def __init__(self):
         self.Actions = {
             # 'ptx': [24, 30, 2],
-            'RBS': [-10, 10, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
-            'TBS': [-10, 10, 5],
+            'RBS': [-50, 50, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
+            'TBS': [-50, 50, 5],
             'RBeamWidth': [1,3,1],
             'TBeamWidth': [1,3,1]
         }
@@ -433,7 +433,7 @@ class RFBeamEnv(gym.Env):
         self.num_observations = len(self.observation_values.keys())
         self.min_state = self.observation_values[0][0]#minimum SNR state
         #self.max_state = self.observation_values[self.num_observations-1][0]#maximum SNR state
-        self.state_threshold =28 #good enough SNR state
+        self.state_threshold = 28 #good enough SNR state
         self.N_tx = 16 #Num of transmitter antenna elements
         self.N_rx = 16 #Num of receiver antenna elements
         self.count = 0
@@ -490,7 +490,7 @@ class RFBeamEnv(gym.Env):
         #check the legal move first and then return its reward
         #if action in self.actions[self.current_state]:
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
-        state = self.state
+        prev_state = self.state
 
         SNR = self.mimo.Calc_SNR(self.ptx,self.action_values[action][0], self.action_values[action][1], self.action_values[action][2], self.action_values[action][3])
 
@@ -509,13 +509,26 @@ class RFBeamEnv(gym.Env):
         self.count+=1
         done = self.game_over(SNR_state) #This is the crucial step for algo to reach the final state early
 
+        '''
         if done:
-            reward = 5
+            reward = 15
             print("Reached Final state: {0}, Actions Taken: {1}, steps: {2}".format(SNR_state, self.action_values[action], self.count))
+        elif SNR_state <= prev_state:
+            reward = -35
         elif SNR_state >= self.state_threshold:
-            reward = 5*np.exp((SNR_state - self.max_state) / 10)  # shaping reward function
+            reward = 15*np.exp((SNR_state - self.state_threshold) / 10)  # shaping reward function
         else:
             reward=0
+        '''
+        if done:
+            reward = 10
+            print("Reached Final state: {0}, Actions Taken: {1}, steps: {2}".format(SNR_state, self.action_values[action], self.count))
+        elif SNR_state <= prev_state:
+            reward = -40
+        elif SNR_state < self.state_threshold:
+            reward = -5
+        else:
+            reward = 10* np.exp((SNR_state - self.max_state) / 10)  # shaping reward function
 
         #Mapping back from SNR range to observation space
         state = self.rev_observation_values[SNR_state]
@@ -548,7 +561,8 @@ class RFBeamEnv(gym.Env):
 
     def reset(self):
         # Note: should be a uniform random value between starting 4-5 SNR states
-        self.state= self.observation_space.sample()
+        observation= self.observation_space.sample()
+        self.state = self.observation_values[observation][0]
 
         #self.mimo = MIMO(self.ptx,self.Actions['RBS'][0], self.Actions['TBS'][0], 4, 4)
         #self.mimo = MIMO(self.ptx, 0, 180, self.N_tx, self.N_rx, self.xrange, self.xangle)

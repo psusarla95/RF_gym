@@ -180,7 +180,7 @@ class MIMO:
         #print("f_mat: {0}".format(f_mat))
         N0 = self.Noise()
 
-        rssi_val = np.zeros((f_mat.shape[1], w_mat.shape[1]))  # (tx levels, rx_levels)
+        rssi_val = np.zeros((f_mat.shape[1], w_mat.shape[1]), dtype=np.complex)  # (tx levels, rx_levels)
         for i in range(rssi_val.shape[1]):
             for j in range(rssi_val.shape[0]):
 
@@ -195,11 +195,15 @@ class MIMO:
                 #print("channel coefficient: {0}, wRF: {1}, fRF: {2}".format(h, wRF, fRF))
                     #np.sqrt(ptx / self.nFFT) * c_k * np.matmul(np.matmul(wRF.conj().T, H_k), fRF)[0, 0] * a[
                     #n - 1] * np.exp(-1j * 2 * pi * n * self.df * self.tau_k) + N0_f
-                rssi_val[j, i] += ((r_f.real) ** 2 + (r_f.imag) ** 2)
+                rssi_val[j,i] = r_f
+                #rssi_val[j, i] += ((r_f.real) ** 2 + (r_f.imag) ** 2)
+
                 #print("RSSI_val({1},{2}): {0}".format(rssi_val[i,j], i, j))
                 #break
 
-        best_RSSI_val = np.max(rssi_val)
+        best_RSSI_vec = np.max(rssi_val)
+        best_RSSI_val = ((best_RSSI_vec.real)**2 + (best_RSSI_vec.imag)**2)
+        #print("RSSI val: {0}, rssi_vec: {1}".format(best_RSSI_val, best_RSSI_vec))
         SNR = Es * best_RSSI_val / N0
         #print("best RSSI_val: {0}".format(best_RSSI_val))
         #print("Measure SNR: {0}, Es: {1}, No: {2}, indmax: {3}".format(SNR, Es, N0, np.argmax(rssi_val)))
@@ -225,10 +229,10 @@ def Action_Space_Mapping(actions):
 if __name__ == '__main__':
     Actions = {
         #'ptx': [20, 44, 1],
-        'RBS': [-10, 10, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
-        'TBS': [-10, 10, 5],
-        'RBW': [1,2,1],
-        'TBW':[1,2,1]
+        'RBS': [-50, 50, 5],  # [-24 * pi / 216, 24 * pi / 216, 6 * pi / 216]
+        'TBS': [-50, 50, 5],
+        'RBW': [1,3,1],
+        'TBW':[1,3,1]
     }
 
     action_values = Action_Space_Mapping(Actions)
@@ -236,8 +240,8 @@ if __name__ == '__main__':
 
     #xrange=3600
     #xangle=40
-    Xrange=np.arange(100,1001,100)
-    Xangle=np.arange(0,1,1)
+    Xrange=np.arange(100,101,100)
+    Xangle=np.arange(-40,41,40)
     print(Xrange)
     print(Xangle)
 
@@ -263,7 +267,7 @@ if __name__ == '__main__':
             snr_list = []
             maxSNR = -30
             SNR_counts = {}
-            for i in range(-30, 51):
+            for i in range(-50, 51):
                 SNR_counts[i] = 0
             # mimo = MIMO(Actions['ptx'][0], Actions['RBS'][0], Actions['TBS'][0], 16,16)
             init_ptx = best_ptx
@@ -286,6 +290,7 @@ if __name__ == '__main__':
 
                 logSNR = np.around(10 * np.log10(snr), decimals=5)
 
+                #print(int(np.around(logSNR,2)))
                 SNR_counts[int(np.around(logSNR,2))] +=1
 
 
@@ -301,9 +306,9 @@ if __name__ == '__main__':
 
     ref_data['SNR'] = best_SNRS
 
-    df = pd.DataFrame(ref_data, columns=['Xrange', 'Xangle', 'SNR'])
-    print(df)
-    df.to_csv(filename,index=False)
+    #df = pd.DataFrame(ref_data, columns=['Xrange', 'Xangle', 'SNR'])
+    #print(df)
+    #df.to_csv(filename,index=False)
 
 
     '''
