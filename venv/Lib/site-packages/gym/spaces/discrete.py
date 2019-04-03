@@ -1,19 +1,22 @@
 import numpy as np
-import gym
+from .space import Space
 
-class Discrete(gym.Space):
-    """
-    {0,1,...,n-1}
 
-    Example usage:
-    self.observation_space = spaces.Discrete(2)
+class Discrete(Space):
+    """A discrete space in :math:`\{ 0, 1, \dots, n-1 \}`. 
+    
+    Example::
+    
+        >>> Discrete(2)
+        
     """
     def __init__(self, n):
+        assert n >= 0
         self.n = n
-        gym.Space.__init__(self, (), np.int64)
+        super(Discrete, self).__init__((), np.int64)
 
     def sample(self):
-        return gym.spaces.np_random.randint(self.n)
+        return self.np_random.randint(self.n)
 
     def contains(self, x):
         if isinstance(x, int):
@@ -28,4 +31,4 @@ class Discrete(gym.Space):
         return "Discrete(%d)" % self.n
 
     def __eq__(self, other):
-        return self.n == other.n
+        return isinstance(other, Discrete) and self.n == other.n
