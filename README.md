@@ -11,4 +11,4 @@ This is a custom environment developed for MIMO RL application using OpenAI gym 
 This directory contains the main function of various tests carried on the developed custom environment and Reinforcement learning solution for Beamforming problem. The implementations in this directory has both Q-table learning implementations as well as deep Qlearning.
 
 # Installation
-run python setup.py before executing the test code. This helps installing the necessary packages required for this environment.
+run `python setup.py` before executing the test code. This helps installing the necessary packages required for this environment.
